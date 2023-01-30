@@ -14,7 +14,6 @@
     "test-simple": "node --unhandled-rejections=strict ./scriptsRunner.js generate validate",
     "test-extended": "node --unhandled-rejections=strict ./scriptsRunner.js generate-extended validate",
     "test-specific": "node --unhandled-rejections=strict ./scriptsRunner.js test:*",
-    "prepare": "npm run test-all",
     "generate": "node tests/generate.js",
     "generate-extended": "node tests/generate-extended.js",
     "validate": "node tests/validate.js",
