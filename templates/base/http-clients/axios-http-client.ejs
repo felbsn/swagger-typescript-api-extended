@@ -69,29 +69,31 @@ export class HttpClient<SecurityDataType = unknown> {
       };
     }
 
-    protected stringifyFormItem(formItem: unknown) {
-      if (typeof formItem === "object" && formItem !== null) {
-        return JSON.stringify(formItem);
+    protected handleFormItem(fd: FormData, key: string, item: any) {
+      if (item == null) {
+  
+      } else if (item instanceof Blob || item instanceof File) {
+        fd.append(key, item)
+      } else if (item instanceof Array) {
+        for (let i = 0; i < item.length; i++) {
+          const element = item[i];
+          let currentKey = `${key}[${i}]`;
+          this.handleFormItem(fd, currentKey, element)
+        }
+      } else if (item instanceof Object) {
+        for (const entry of Object.entries(item)) {
+          let ancestor = key ? key + "." : ""
+          this.handleFormItem(fd, `${ancestor}${entry[0]}`, entry[1]) //(key ? (key + ".") : "") +
+        }
       } else {
-        return `${formItem}`;
+        fd.append(key, `${item}`)
       }
     }
-
+  
     protected createFormData(input: Record<string, unknown>): FormData {
-      return Object.keys(input || {}).reduce((formData, key) => {
-        const property = input[key];
-        const propertyContent: any[] = (property instanceof Array) ? property : [property]
-
-        for (const formItem of propertyContent) {
-          const isFileType = formItem instanceof Blob || formItem instanceof File;
-          formData.append(
-            key,
-            isFileType ? formItem : this.stringifyFormItem(formItem)
-            );
-        }
-
-        return formData;
-      }, new FormData());
+      let fd = new FormData();
+      this.handleFormItem(fd, "", input)
+      return fd;
     }
 
     public request = async <T = any, _E = any>({
