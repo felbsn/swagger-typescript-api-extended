@@ -73,6 +73,7 @@ export class HttpClient<SecurityDataType = unknown> {
       if (item == null) {
   
       } else if (item instanceof Blob || item instanceof File) {
+        key = key.replace(/\[[0-9]+\]$/, "")
         fd.append(key, item)
       } else if (item instanceof Array) {
         for (let i = 0; i < item.length; i++) {
