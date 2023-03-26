@@ -17,7 +17,12 @@ const FILE_PREFIX = `/* eslint-disable */
 `;
 
 class FileSystem {
-  constructor() {}
+  /** @type {Logger} */
+  logger;
+
+  constructor({ logger }) {
+    this.logger = logger;
+  }
 
   getFileContent = (path) => {
     return fs.readFileSync(path, { encoding: "UTF-8" });
@@ -55,13 +60,17 @@ class FileSystem {
       } else {
         fs.rmdirSync(path, { recursive: true });
       }
-    } catch (e) {}
+    } catch (e) {
+      this.logger.debug("failed to remove dir", e);
+    }
   };
 
   createDir = (path) => {
     try {
       makeDir.sync(path);
-    } catch (e) {}
+    } catch (e) {
+      this.logger.debug("failed to create dir", e);
+    }
   };
 
   cleanDir = (path) => {
@@ -69,10 +78,16 @@ class FileSystem {
     this.createDir(path);
   };
 
-  pathIsExist = (path) => path && fs.existsSync(path);
+  pathIsExist = (path) => {
+    return !!path && fs.existsSync(path);
+  };
 
-  createFile = ({ path, fileName, content, withPrefix }) =>
-    fs.writeFileSync(resolve(__dirname, path, `./${fileName}`), `${withPrefix ? FILE_PREFIX : ""}${content}`, _.noop);
+  createFile = ({ path, fileName, content, withPrefix }) => {
+    const absolutePath = resolve(__dirname, path, `./${fileName}`);
+    const fileContent = `${withPrefix ? FILE_PREFIX : ""}${content}`;
+
+    return fs.writeFileSync(absolutePath, fileContent, _.noop);
+  };
 }
 
 module.exports = {

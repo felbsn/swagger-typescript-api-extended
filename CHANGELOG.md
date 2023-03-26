@@ -1,5 +1,53 @@
 # next release  
 
+BREAKING_CHANGE: change swagger-typescript-api NodeJS "generateApi" function return type  
+internal: remove redundant internal scripts  
+fix: critical bugs based with extract types and enums  
+fix: sort types option (sort was not correctly work with nested or extracted types)  
+fix: problems based with extracting enums;
+feat: ability to sort routes;
+internal: change process with using custom templates  
+BREAKING_CHANGE: remove `rawModelTypes` from output api configuration  
+
+```diff
+interface GenerateApiOutput {
+...
+-  files: { name: string; content: string; declaration: { name: string; content: string } | null }[];
++  files: { fileName: string; fileContent: string; fileExtension: string }[];
+...
+}
+```
+
+internal: refactor schema parser code (preparing it for async code execution)  
+fix: problem with filtering primitive in complex types (#459)  
+feat: add discriminator property support (#456)  
+internal: prepare code + templates for async code execution (next plans)  
+fix: problems with dot in query params (hard fix) (#460)   
+feature: ability to send custom Ts output code translator to js. Example:  
+```ts
+ const { Translator } = require("swagger-typescript-api/src/translators/translator");
+ const { JavascriptTranslator } = require("swagger-typescript-api/src/translators/javascript");
+
+ class MyTranslator extends Translator { // or use extends JavascriptTranslator
+     translate({ fileName, fileExtension, fileContent }) {
+         // format ts\js code with using this codeFormatter (prettier + ts import fixer)
+         this.codeFormatter.format(fileContent)
+         // config of the code gen process
+         this.config.
+         // logger
+         this.logger.
+
+         return [
+             {
+                 fileName,
+                 fileExtension,
+                 fileContent,
+             }
+         ]
+     }
+ }
+```
+
 ## 12.0.2
 
 fix: missing option `--extract-enums` (#344)  

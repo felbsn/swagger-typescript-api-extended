@@ -3,7 +3,7 @@ const _ = require("lodash");
 const Eta = require("eta");
 const path = require("path");
 
-class Templates {
+class TemplatesWorker {
   /**
    * @type {CodeGenConfig}
    */
@@ -21,19 +21,24 @@ class Templates {
 
   getRenderTemplateData;
 
-  constructor(config, logger, fileSystem, getRenderTemplateData) {
+  constructor({ config, logger, fileSystem, getRenderTemplateData }) {
     this.config = config;
     this.logger = logger;
     this.fileSystem = fileSystem;
     this.getRenderTemplateData = getRenderTemplateData;
   }
 
-  getTemplatePaths = ({ templates, modular }) => {
+  /**
+   *
+   * @param config {CodeGenConfig}
+   * @returns {CodeGenConfig.templatePaths}
+   */
+  getTemplatePaths = (config) => {
     const baseTemplatesPath = resolve(__dirname, "../templates/base");
     const defaultTemplatesPath = resolve(__dirname, "../templates/default");
     const modularTemplatesPath = resolve(__dirname, "../templates/modular");
-    const originalTemplatesPath = modular ? modularTemplatesPath : defaultTemplatesPath;
-    const customTemplatesPath = templates ? resolve(process.cwd(), templates) : originalTemplatesPath;
+    const originalTemplatesPath = config.modular ? modularTemplatesPath : defaultTemplatesPath;
+    const customTemplatesPath = (config.templates && resolve(process.cwd(), config.templates)) || null;
 
     return {
       /** `templates/base` */
@@ -63,7 +68,10 @@ class Templates {
     const isPath = _.startsWith(packageOrPath, "./") || _.startsWith(packageOrPath, "../");
 
     if (isPath) {
-      return require(path.resolve(this.config.templates, packageOrPath));
+      return require(path.resolve(
+        this.config.templatePaths.custom || this.config.templatePaths.original,
+        packageOrPath,
+      ));
     }
 
     return require(packageOrPath);
@@ -78,7 +86,7 @@ class Templates {
 
     if (!fileName) return "";
 
-    const customFullPath = this.getTemplateFullPath(templatePaths.custom, fileName);
+    const customFullPath = templatePaths.custom && this.getTemplateFullPath(templatePaths.custom, fileName);
     let fileContent = customFullPath && this.fileSystem.getFileContent(customFullPath);
 
     if (fileContent) {
@@ -91,10 +99,14 @@ class Templates {
     if (baseFullPath) {
       fileContent = this.fileSystem.getFileContent(baseFullPath);
     } else {
-      this.logger.warn(
-        `"${_.lowerCase(name)}" template not found in "${templatePaths.custom}"`,
-        `\nCode generator will use the default template`,
-      );
+      if (templatePaths.custom) {
+        this.logger.warn(
+          `"${_.lowerCase(name)}" template not found in "${templatePaths.custom}"`,
+          `\nCode generator will use the default template`,
+        );
+      } else {
+        this.logger.log(`Code generator will use the default template for "${_.lowerCase(name)}"`);
+      }
     }
 
     const originalFullPath = this.getTemplateFullPath(templatePaths.original, fileName);
@@ -107,7 +119,9 @@ class Templates {
   };
 
   getTemplates = ({ templatePaths }) => {
-    this.logger.log(`try to read templates from directory "${templatePaths.custom}"`);
+    if (templatePaths.custom) {
+      this.logger.log(`try to read templates from directory "${templatePaths.custom}"`);
+    }
 
     return _.reduce(
       this.config.templateInfos,
@@ -137,7 +151,8 @@ class Templates {
       return this.fileSystem.getFileContent(fixedPath);
     }
 
-    const customPath = this.findTemplateWithExt(resolve(this.config.templatePaths.custom, path));
+    const customPath =
+      this.config.templatePaths.custom && this.findTemplateWithExt(resolve(this.config.templatePaths.custom, path));
 
     if (customPath) {
       return this.fileSystem.getFileContent(customPath);
@@ -152,6 +167,12 @@ class Templates {
     return "";
   };
 
+  /**
+   * @param template
+   * @param configuration
+   * @param options
+   * @returns {Promise<string|string|void>}
+   */
   renderTemplate = (template, configuration, options) => {
     if (!template) return "";
 
@@ -173,5 +194,5 @@ class Templates {
 }
 
 module.exports = {
-  Templates,
+  TemplatesWorker,
 };

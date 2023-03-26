@@ -2,20 +2,23 @@ const _ = require("lodash");
 const { SCHEMA_TYPES } = require("../constants");
 const { internalCase } = require("../util/internal-case");
 const { pascalCase } = require("../util/pascal-case");
+const { camelCase } = require("lodash");
 
 class SchemaUtils {
-  /**
-   * @type {CodeGenConfig}
-   */
+  /** @type {CodeGenConfig} */
   config;
-  /**
-   * @type {SchemaComponentsMap}
-   */
+  /** @type {SchemaComponentsMap} */
   schemaComponentsMap;
+  /** @type {TypeNameFormatter} */
+  typeNameFormatter;
+  /** @type {SchemaWalker} */
+  schemaWalker;
 
-  constructor(config, schemaComponentsMap) {
+  constructor({ config, schemaComponentsMap, typeNameFormatter, schemaWalker }) {
     this.config = config;
     this.schemaComponentsMap = schemaComponentsMap;
+    this.typeNameFormatter = typeNameFormatter;
+    this.schemaWalker = schemaWalker;
   }
 
   getRequiredProperties = (schema) => {
@@ -32,6 +35,7 @@ class SchemaUtils {
 
   getSchemaRefType = (schema) => {
     if (!this.isRefSchema(schema)) return null;
+    // const resolved = this.schemaWalker.findByRef(schema.$ref);
     return this.schemaComponentsMap.get(schema.$ref);
   };
 
@@ -145,18 +149,79 @@ class SchemaUtils {
     return _.uniq(_.filter(contents, (type) => filterFn(type)));
   };
 
-  resolveTypeName = (typeName, suffixes, resolver) => {
+  resolveTypeName = (typeName, { suffixes, resolver, prefixes }) => {
     if (resolver) {
-      return this.config.componentTypeNameResolver.resolve((reserved) => {
-        const variant = resolver(pascalCase(typeName), reserved);
-        if (variant == null) return variant;
-        return pascalCase(variant);
+      return this.config.componentTypeNameResolver.resolve(null, (reserved) => {
+        return resolver(pascalCase(typeName), reserved);
       });
     } else {
-      return this.config.componentTypeNameResolver.resolve(
-        suffixes.map((suffix) => pascalCase(`${typeName} ${suffix}`)),
+      return this.config.componentTypeNameResolver.resolve([
+        ...(prefixes || []).map((prefix) => pascalCase(`${prefix} ${typeName}`)),
+        ...(suffixes || []).map((suffix) => pascalCase(`${typeName} ${suffix}`)),
+      ]);
+    }
+  };
+
+  getComplexType = (schema) => {
+    if (schema.oneOf) return SCHEMA_TYPES.COMPLEX_ONE_OF;
+    if (schema.allOf) return SCHEMA_TYPES.COMPLEX_ALL_OF;
+    if (schema.anyOf) return SCHEMA_TYPES.COMPLEX_ANY_OF;
+    // TODO :(
+    if (schema.not) return SCHEMA_TYPES.COMPLEX_NOT;
+
+    return SCHEMA_TYPES.COMPLEX_UNKNOWN;
+  };
+
+  getInternalSchemaType = (schema) => {
+    if (!_.isEmpty(schema.enum) || !_.isEmpty(this.getEnumNames(schema))) return SCHEMA_TYPES.ENUM;
+    if (schema.discriminator) return SCHEMA_TYPES.DISCRIMINATOR;
+    if (schema.allOf || schema.oneOf || schema.anyOf || schema.not) return SCHEMA_TYPES.COMPLEX;
+    if (!_.isEmpty(schema.properties)) return SCHEMA_TYPES.OBJECT;
+    if (schema.type === SCHEMA_TYPES.ARRAY) return SCHEMA_TYPES.ARRAY;
+
+    return SCHEMA_TYPES.PRIMITIVE;
+  };
+
+  getSchemaType = (schema) => {
+    if (!schema) return this.config.Ts.Keyword.Any;
+
+    const refTypeInfo = this.getSchemaRefType(schema);
+
+    if (refTypeInfo) {
+      return this.checkAndAddRequiredKeys(
+        schema,
+        this.safeAddNullToType(schema, this.typeNameFormatter.format(refTypeInfo.typeName)),
       );
     }
+
+    const primitiveType = this.getSchemaPrimitiveType(schema);
+
+    if (primitiveType == null) return this.config.Ts.Keyword.Any;
+
+    let resultType;
+
+    const typeAlias =
+      _.get(this.config.primitiveTypes, [primitiveType, schema.format]) ||
+      _.get(this.config.primitiveTypes, [primitiveType, "$default"]) ||
+      this.config.primitiveTypes[primitiveType];
+
+    if (_.isFunction(typeAlias)) {
+      resultType = typeAlias(schema, this);
+    } else {
+      resultType = typeAlias || primitiveType;
+    }
+
+    if (!resultType) return this.config.Ts.Keyword.Any;
+
+    return this.checkAndAddRequiredKeys(schema, this.safeAddNullToType(schema, resultType));
+  };
+
+  buildTypeNameFromPath = (schemaPath) => {
+    schemaPath = _.uniq(_.compact(schemaPath));
+
+    if (!schemaPath || !schemaPath[0]) return null;
+
+    return pascalCase(camelCase(_.uniq([schemaPath[0], schemaPath[schemaPath.length - 1]]).join("_")));
   };
 }
 

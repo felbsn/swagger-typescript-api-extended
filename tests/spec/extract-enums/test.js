@@ -9,17 +9,18 @@ const schemas = createSchemaInfos({ absolutePathToSchemas: resolve(__dirname, ".
 schemas.forEach(({ absolutePath, apiFileName }) => {
   generateApiForTest({
     testName: "--extract-enums option test",
-    silent: true,
     name: apiFileName,
     input: absolutePath,
     output: resolve(__dirname, "./"),
     extractEnums: true,
     generateClient: false,
+    // extractRequestBody: true,
+    // extractResponseBody: true,
     fixInvalidEnumKeyPrefix: "InvalidKey",
-    enumKeyPrefix: "EnumKeyPrefix",
-    enumKeySuffix: "EnumKeySuffix",
-    typePrefix: "TypeNamePrefix",
-    typeSuffix: "TypeNameSuffix",
+    enumKeyPrefix: "EKP",
+    enumKeySuffix: "EKS",
+    typePrefix: "TNP",
+    typeSuffix: "TNS",
   }).then(() => {
     validateGeneratedModule(resolve(__dirname, `./${apiFileName}`));
     assertGeneratedModule(resolve(__dirname, `./${apiFileName}`), resolve(__dirname, `./expected.ts`));

@@ -1,8 +1,9 @@
 const { objectAssign } = require("./util/object-assign");
 const _ = require("lodash");
 const CONSTANTS = require("./constants");
-const { ComponentTypeNameResolver } = require("./util/name-resolver");
+const { ComponentTypeNameResolver } = require("./component-type-name-resolver");
 const { cosmiconfigSync } = require("cosmiconfig");
+const ts = require("typescript");
 
 const TsKeyword = {
   Number: "number",
@@ -35,7 +36,7 @@ const TsCodeGenKeyword = {
 class CodeGenConfig {
   version = CONSTANTS.PROJECT_VERSION;
   /** CLI flag */
-  templates = "../templates/default";
+  templates = "";
   /** CLI flag */
   generateResponses = false;
   /** CLI flag */
@@ -89,7 +90,7 @@ class CodeGenConfig {
     onPreParseSchema: (originalSchema, typeName, schemaType) => void 0,
     onParseSchema: (originalSchema, parsedSchema) => parsedSchema,
     onCreateRoute: (routeData) => routeData,
-    onInit: (config) => config,
+    onInit: (config, codeGenProcess) => config,
     onPrepareConfig: (apiConfig) => apiConfig,
     onCreateRequestParams: (rawType) => {},
     onCreateRouteName: () => {},
@@ -102,6 +103,7 @@ class CodeGenConfig {
   unwrapResponseData = false;
   disableThrowOnError = false;
   sortTypes = false;
+  sortRoutes = false;
   templatePaths = {
     /** `templates/base` */
     base: "",
@@ -134,7 +136,8 @@ class CodeGenConfig {
   enumKeyPrefix = "";
   enumKeySuffix = "";
   patch = false;
-  componentTypeNameResolver = new ComponentTypeNameResolver(null, []);
+  /** @type {ComponentTypeNameResolver} */
+  componentTypeNameResolver;
   /** name of the main exported class */
   apiClassName = "Api";
   debug = false;
@@ -158,6 +161,10 @@ class CodeGenConfig {
   fixInvalidTypeNamePrefix = "Type";
   fixInvalidEnumKeyPrefix = "Value";
 
+  enumKeyResolverName = "Value";
+  typeNameResolverName = "ComponentType";
+  specificArgNameResolverName = "arg";
+
   successResponseStatusRange = [200, 299];
 
   /** @type {ExtractingOptions} */
@@ -166,7 +173,26 @@ class CodeGenConfig {
     requestParamsSuffix: ["Params"],
     responseBodySuffix: ["Data", "Result", "Output"],
     responseErrorSuffix: ["Error", "Fail", "Fails", "ErrorData", "HttpError", "BadResponse"],
+    enumSuffix: ["Enum"],
+    discriminatorMappingSuffix: ["Mapping", "Mapper", "MapType"],
+    discriminatorAbstractPrefix: ["Abstract", "Discriminator", "Internal", "Polymorph"],
   };
+
+  compilerTsConfig = {
+    module: "ESNext",
+    noImplicitReturns: true,
+    alwaysStrict: true,
+    target: ts.ScriptTarget.ESNext,
+    declaration: true,
+    noImplicitAny: false,
+    sourceMap: false,
+    removeComments: false,
+    disableSizeLimit: true,
+    esModuleInterop: true,
+    emitDecoratorMetadata: true,
+    skipLibCheck: true,
+  };
+  customTranslator;
 
   Ts = {
     Keyword: _.cloneDeep(TsKeyword),
@@ -222,6 +248,8 @@ class CodeGenConfig {
      * [key: $A1]: $A2
      */
     InterfaceDynamicField: (key, value) => `[key: ${key}]: ${value}`,
+
+    EnumUsageKey: (enumStruct, key) => `${enumStruct}.${key}`,
     /**
      * $A1 = $A2
      */
@@ -294,10 +322,6 @@ class CodeGenConfig {
       "relative-json-pointer": () => this.Ts.Keyword.String,
       regex: () => this.Ts.Keyword.String,
     },
-    array: ({ items, ...schemaPart }, parser) => {
-      const content = parser.getInlineParseContent(items);
-      return parser.schemaUtils.safeAddNullToType(schemaPart, this.Ts.ArrayType(content));
-    },
   };
 
   templateInfos = [
@@ -345,6 +369,7 @@ class CodeGenConfig {
 
     this.jsPrimitiveTypes = [this.Ts.Keyword.Number, this.Ts.Keyword.String, this.Ts.Keyword.Boolean];
     this.jsEmptyTypes = [this.Ts.Keyword.Null, this.Ts.Keyword.Undefined];
+    this.componentTypeNameResolver = new ComponentTypeNameResolver(this, null, []);
   }
 
   /**

@@ -2,28 +2,23 @@ const { SCHEMA_TYPES } = require("../constants");
 const _ = require("lodash");
 
 class SchemaFormatters {
-  /**
-   * @type {CodeGenConfig}
-   */
+  /** @type {CodeGenConfig} */
   config;
-  /**
-   * @type {Logger}
-   */
+  /** @type {Logger} */
   logger;
-  /**
-   * @type {SchemaParser}
-   */
-  schemaParser;
-  /**
-   * @type {Templates}
-   */
-  templates;
+  /** @type {TemplatesWorker} */
+  templatesWorker;
+  /** @type {SchemaUtils} */
+  schemaUtils;
 
-  constructor(config, logger, schemaParser, templates) {
-    this.config = config;
-    this.logger = logger;
-    this.schemaParser = schemaParser;
-    this.templates = templates;
+  /**
+   * @param schemaParser {SchemaParser | SchemaParserFabric}
+   */
+  constructor(schemaParser) {
+    this.config = schemaParser.config;
+    this.logger = schemaParser.logger;
+    this.schemaUtils = schemaParser.schemaUtils;
+    this.templatesWorker = schemaParser.templatesWorker;
   }
 
   base = {
@@ -68,7 +63,7 @@ class SchemaFormatters {
                 ..._.map(parsedSchema.content, ({ value }) => `${value}`),
                 parsedSchema.nullable && this.config.Ts.Keyword.Null,
               ]),
-            ),
+            ) || this.config.Ts.Keyword.Any,
       };
     },
     [SCHEMA_TYPES.OBJECT]: (parsedSchema) => {
@@ -76,18 +71,18 @@ class SchemaFormatters {
         return {
           ...parsedSchema,
           typeIdentifier: this.config.Ts.Keyword.Type,
-          content: this.schemaParser.schemaUtils.safeAddNullToType(parsedSchema.content),
+          content: this.schemaUtils.safeAddNullToType(parsedSchema.content),
         };
       }
 
       return {
         ...parsedSchema,
         typeIdentifier: this.config.Ts.Keyword.Type,
-        content: this.schemaParser.schemaUtils.safeAddNullToType(
+        content: this.schemaUtils.safeAddNullToType(
           parsedSchema,
           parsedSchema.content.length
             ? this.config.Ts.ObjectWrapper(this.formatObjectContent(parsedSchema.content))
-            : this.config.Ts.RecordType(Ts.Keyword.String, this.config.Ts.Keyword.Any),
+            : this.config.Ts.RecordType(this.config.Ts.Keyword.String, this.config.Ts.Keyword.Any),
         ),
       };
     },
@@ -127,11 +122,13 @@ class SchemaFormatters {
   };
 
   formatObjectContent = (content) => {
-    return _.map(content, (part) => {
+    const fields = [];
+
+    for (const part of content) {
       const extraSpace = "  ";
       const result = `${extraSpace}${part.field},\n`;
 
-      const renderedJsDoc = this.templates.renderTemplate(this.config.templatesToRender.dataContractJsDoc, {
+      const renderedJsDoc = this.templatesWorker.renderTemplate(this.config.templatesToRender.dataContractJsDoc, {
         data: part,
       });
 
@@ -140,10 +137,14 @@ class SchemaFormatters {
         .map((c) => `${extraSpace}${c}`)
         .join("\n");
 
-      if (routeNameFromTemplate) return `${routeNameFromTemplate}${result}`;
+      if (routeNameFromTemplate) {
+        fields.push(`${routeNameFromTemplate}${result}`);
+      } else {
+        fields.push(`${result}`);
+      }
+    }
 
-      return `${result}`;
-    }).join("");
+    return fields.join("");
   };
 }
 

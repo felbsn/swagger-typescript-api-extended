@@ -4,7 +4,7 @@ const _ = require("lodash");
  * @typedef {"enum-key" | "type-name"} FormattingSchemaType
  */
 
-class TypeName {
+class TypeNameFormatter {
   /** @type {Map<string, string>} */
   formattedModelNamesMap = new Map();
 
@@ -14,7 +14,7 @@ class TypeName {
   /** @type {Logger} */
   logger;
 
-  constructor(config, logger) {
+  constructor({ config, logger }) {
     this.config = config;
     this.logger = logger;
   }
@@ -42,6 +42,7 @@ class TypeName {
       return name;
     }
 
+    // constant names like LEFT_ARROW, RIGHT_FORWARD, ETC_KEY, _KEY_NUM_
     if (/^([A-Z_]{1,})$/g.test(name)) {
       return _.compact([typePrefix, name, typeSuffix]).join("_");
     }
@@ -68,12 +69,12 @@ class TypeName {
    * @return {string}
    */
   fixModelName = (name, options) => {
+    const { type } = options || {};
+
     if (!this.isValidName(name)) {
       if (!/^[a-zA-Z_$]/g.test(name)) {
         const fixPrefix =
-          options && options.type === "enum-key"
-            ? this.config.fixInvalidEnumKeyPrefix
-            : this.config.fixInvalidTypeNamePrefix;
+          type === "enum-key" ? this.config.fixInvalidEnumKeyPrefix : this.config.fixInvalidTypeNamePrefix;
         name = `${fixPrefix} ${name}`;
       }
 
@@ -94,5 +95,5 @@ class TypeName {
 }
 
 module.exports = {
-  TypeName,
+  TypeNameFormatter,
 };

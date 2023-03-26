@@ -7,7 +7,7 @@ interface GenerateApiParamsBase {
   name?: string;
 
   /**
-   * path to folder where will been located the created api module.
+   * path to folder where will be located the created api module.
    *
    * may set to `false` to skip writing content to disk. in this case,
    * you may access the `files` on the return value.
@@ -58,6 +58,11 @@ interface GenerateApiParamsBase {
    * sort data contracts in alphabetical order
    */
   sortTypes?: boolean;
+
+  /**
+   * sort routes in alphabetical order
+   */
+  sortRoutes?: boolean;
 
   /**
    * generate js api module with declaration file (default: false)
@@ -168,6 +173,43 @@ interface GenerateApiParamsBase {
 
   /** configuration for fetching swagger schema requests */
   requestOptions?: null | Partial<import("node-fetch").RequestInit>;
+
+  /** ts compiler configuration object (for --to-js option) */
+  compilerTsConfig?: Record<string, any>;
+
+  /**
+   * custom ts->* translator
+   * do not use constructor args, it can break functionality of this property, just send class reference
+   *
+   * @example
+   * ```ts
+   * const { Translator } = require("swagger-typescript-api/src/translators/translator");
+   *
+   * class MyTranslator extends Translator {
+   *
+   *     translate({ fileName, fileExtension, fileContent }) {
+   *         this.codeFormatter.format()
+   *         this.config.
+   *         this.logger.
+   *
+   *         return [
+   *             {
+   *                 fileName,
+   *                 fileExtension,
+   *                 fileContent,
+   *             }
+   *         ]
+   *     }
+   * }
+   * ```
+   */
+  customTranslator?: new () => typeof import("./src/translators/translator").Translator;
+  /** fallback name for enum key resolver */
+  enumKeyResolverName?: string;
+  /** fallback name for type name resolver */
+  typeNameResolverName?: string;
+  /** fallback name for specific arg name resolver */
+  specificArgNameResolverName?: string;
 }
 
 type CodeGenConstruct = {
@@ -282,7 +324,10 @@ export interface Hooks {
   /** calls after parse route (return type: customized route (ParsedRoute), nothing change (void), false (ignore this route)) */
   onCreateRoute: (routeData: ParsedRoute) => ParsedRoute | void | false;
   /** Start point of work this tool (after fetching schema) */
-  onInit?: <C extends GenerateApiConfiguration["config"]>(configuration: C) => C | void;
+  onInit?: <C extends GenerateApiConfiguration["config"]>(
+    configuration: C,
+    codeGenProcess: import("./src/code-gen-process").CodeGenProcess,
+  ) => C | void;
   /** customize configuration object before sending it to ETA templates */
   onPrepareConfig?: <C extends GenerateApiConfiguration>(currentConfiguration: C) => C | void;
   /** customize route name as you need */
@@ -367,7 +412,7 @@ export interface SchemaComponent {
     };
     $parsed: ParsedSchema<SchemaTypeObjectContent | SchemaTypeEnumContent | SchemaTypePrimitiveContent>;
   };
-  componentName: string;
+  componentName: "schemas" | "paths";
   typeData: ParsedSchema<SchemaTypeObjectContent | SchemaTypeEnumContent | SchemaTypePrimitiveContent> | null;
 }
 
@@ -443,10 +488,16 @@ type ExtractingOptions = {
   responseBodySuffix: string[];
   responseErrorSuffix: string[];
   requestParamsSuffix: string[];
+  enumSuffix: string[];
+  discriminatorMappingSuffix: string[];
+  discriminatorAbstractPrefix: string[];
   requestBodyNameResolver: (name: string, reservedNames: string) => string | undefined;
   responseBodyNameResolver: (name: string, reservedNames: string) => string | undefined;
   responseErrorNameResolver: (name: string, reservedNames: string) => string | undefined;
   requestParamsNameResolver: (name: string, reservedNames: string) => string | undefined;
+  enumNameResolver: (name: string, reservedNames: string) => string | undefined;
+  discriminatorMappingNameResolver: (name: string, reservedNames: string) => string | undefined;
+  discriminatorAbstractResolver: (name: string, reservedNames: string) => string | undefined;
 };
 
 export interface GenerateApiConfiguration {
@@ -463,6 +514,18 @@ export interface GenerateApiConfiguration {
     url: string;
     spec: any;
     fileName: string;
+    templatePaths: {
+      /** `templates/base` */
+      base: string;
+      /** `templates/default` */
+      default: string;
+      /** `templates/modular` */
+      modular: string;
+      /** usage path if `--templates` option is not set */
+      original: string;
+      /** custom path to templates (`--templates`) */
+      custom: string | null;
+    };
     authorizationToken?: string;
     generateResponses: boolean;
     defaultResponseAsSuccess: boolean;
@@ -481,6 +544,7 @@ export interface GenerateApiConfiguration {
     extractRequestParams: boolean;
     unwrapResponseData: boolean;
     sortTypes: boolean;
+    sortRoutes: boolean;
     singleHttpClient: boolean;
     typePrefix: string;
     typeSuffix: string;
@@ -505,10 +569,16 @@ export interface GenerateApiConfiguration {
     hooks: Hooks;
     enumNamesAsValues: boolean;
     version: string;
+    compilerTsConfig: Record<string, any>;
+    enumKeyResolverName: string;
+    typeNameResolverName: string;
+    specificArgNameResolverName: string;
+    /** do not use constructor args, it can break functionality of this property, just send class reference */
+    customTranslator?: new (...args: never[]) => typeof import("./src/translators/translator").Translator;
     internalTemplateOptions: {
       addUtilRequiredKeysType: boolean;
     };
-    componentTypeNameResolver: typeof import("./src/util/name-resolver").ComponentTypeNameResolver;
+    componentTypeNameResolver: typeof import("./src/component-type-name-resolver").ComponentTypeNameResolver;
     fileNames: {
       dataContracts: string;
       routeTypes: string;
@@ -533,7 +603,6 @@ export interface GenerateApiConfiguration {
     extractingOptions: ExtractingOptions;
   };
   modelTypes: ModelType[];
-  rawModelTypes: SchemaComponent[];
   hasFormDataRoutes: boolean;
   hasSecurityRoutes: boolean;
   hasQueryRoutes: boolean;
@@ -569,9 +638,18 @@ export interface GenerateApiConfiguration {
   };
 }
 
+type FileInfo = {
+  /** @example myFilename */
+  fileName: string;
+  /** @example .d.ts */
+  fileExtension: string;
+  /** content of the file */
+  fileContent: string;
+};
+
 export interface GenerateApiOutput {
   configuration: GenerateApiConfiguration;
-  files: { name: string; content: string; declaration: { name: string; content: string } | null }[];
+  files: FileInfo[];
   createFile: (params: { path: string; fileName: string; content: string; withPrefix?: boolean }) => void;
   renderTemplate: (
     templateContent: string,
