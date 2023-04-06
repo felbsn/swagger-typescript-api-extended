@@ -1,6 +1,11 @@
 # swagger-typescript-api EXTENDED
 
-#### this fork solves multipart-formdata upload by processing formdata before upload, *currently axios client implemented
+#### fork features
+
+- solves multipart-formdata upload by processing formdata before upload
+- blob response types for application/* (excluding application/json)
+
+*only axios client implemented
 #### rest of the read me same as original.
 
 [![NPM badge](https://img.shields.io/npm/v/swagger-typescript-api.svg)](https://www.npmjs.com/package/swagger-typescript-api) 

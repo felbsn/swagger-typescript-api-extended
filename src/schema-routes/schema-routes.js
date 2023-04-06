@@ -16,6 +16,7 @@ const CONTENT_KIND = {
   URL_ENCODED: "URL_ENCODED",
   FORM_DATA: "FORM_DATA",
   IMAGE: "IMAGE",
+  BLOB: "BLOB",
   OTHER: "OTHER",
   TEXT: "TEXT",
 };
@@ -273,8 +274,12 @@ class SchemaRoutes {
       return CONTENT_KIND.FORM_DATA;
     }
 
+    if (_.some(contentTypes, (contentType) => _.startsWith(contentType, "application/"))) {
+      return CONTENT_KIND.BLOB;
+    }
+
     if (_.some(contentTypes, (contentType) => _.includes(contentType, "image/"))) {
-      return CONTENT_KIND.IMAGE;
+      return CONTENT_KIND.BLOB;
     }
 
     if (_.some(contentTypes, (contentType) => _.startsWith(contentType, "text/"))) {
@@ -363,21 +368,26 @@ class SchemaRoutes {
       (acc, requestInfo, status) => {
         const contentTypes = this.getContentTypes([requestInfo]);
 
+        const kind = this.getContentKind(contentTypes);
+
         return [
           ...acc,
           {
             ...(requestInfo || {}),
             contentTypes: contentTypes,
-            contentKind: this.getContentKind(contentTypes),
-            type: this.schemaParserFabric.schemaUtils.safeAddNullToType(
-              requestInfo,
-              this.getTypeFromRequestInfo({
-                requestInfo,
-                parsedSchemas,
-                operationId,
-                defaultType,
-              }),
-            ),
+            contentKind: kind,
+            type:
+              kind == CONTENT_KIND.BLOB
+                ? "Blob"
+                : this.schemaParserFabric.schemaUtils.safeAddNullToType(
+                    requestInfo,
+                    this.getTypeFromRequestInfo({
+                      requestInfo,
+                      parsedSchemas,
+                      operationId,
+                      defaultType,
+                    }),
+                  ),
             description: this.schemaParserFabric.schemaFormatters.formatDescription(
               requestInfo.description || "",
               true,
