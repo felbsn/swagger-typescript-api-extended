@@ -4,6 +4,7 @@
 
 - solves multipart-formdata upload by processing formdata before upload
 - blob response types for application/* (excluding application/json)
+- axios type only imports fixed
 
 *only axios client implemented
 #### rest of the read me same as original.
