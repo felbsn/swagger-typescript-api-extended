@@ -1,6 +1,7 @@
 const _ = require("lodash");
 const https = require("https");
-const fetch = require("node-fetch-h2");
+// const fetch = require("node-fetch-h2");
+const axios = require("axios").default;
 
 class Request {
   /**
@@ -45,8 +46,10 @@ class Request {
     _.merge(requestOptions, options, this.config.requestOptions);
 
     try {
-      const response = await fetch(url, requestOptions);
-      return await response.text();
+      const res = await axios.get(url, { ...requestOptions, responseType: "text" });
+      return res.data;
+      // const response = await fetch(url, requestOptions);
+      // return await response.text();
     } catch (error) {
       const message = `error while fetching data from URL "${url}"`;
       this.logger.error(message, "response" in error ? error.response : error);
